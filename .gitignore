@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# DTA dump (download via README instructions)
+dta_komplett_*/
+dta_komplett_*.zip
+
+# Generated Parquet datasets
+hf-dta-documents/
+dta_documents/
