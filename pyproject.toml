@@ -1,0 +1,27 @@
+[project]
+name = "dta-experiments"
+version = "0.1.0"
+description = "Experiments on the Deutsches Textarchiv (DTA)"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Stefan Schweter", email = "stefan@schweter.it" }]
+requires-python = ">=3.11"
+dependencies = [
+    "datasets>=4.5.0",
+    "polars>=1.36.1",
+    "requests>=2.31",
+    "rich",
+    "tabulate>=0.9.0",
+    "torch>=2.6",
+    "transformers>=4.56",
+    "xlstm>=2.0",
+]
+
+[tool.uv]
+# Plain scripts in the repository root, nothing to build/install as a package.
+package = false
+
+[[tool.uv.index]]
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
