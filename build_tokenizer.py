@@ -1,6 +1,6 @@
 """Build the character tokenizer for the DTA xLSTM from the Hugging Face dataset.
 
-First step of the pipeline (run before prepare_dta_xlstm_data.py):
+First step of the pipeline (run before prepare_xlstm_data.py):
 
 * it streams the `text` column of "histde/dta-documents"
 * normalizes it with the shared normalization in `text_normalization.py`,
