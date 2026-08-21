@@ -20,7 +20,7 @@ directory together with metadata.json, so train_xlstm.py only needs
 --data-dir.
 
 Usage:
-    python prepare_dta_xlstm_data.py [--tokenizer dta_xlstm/tokenizer]
+    python prepare_xlstm_data.py [--tokenizer dta_xlstm/tokenizer]
                                      [--dataset histde/dta-documents] [--split train]
                                      [--output-dir dta_xlstm/data]
                                      [--limit-docs N]
