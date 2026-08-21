@@ -332,6 +332,134 @@ hf upload "histde/dta-documents" ./hf-dta-documents \
   --commit-message "feat: add initial dataset"
 ```
 
+# Character-based xLSTM
+
+For further experiments on OCR quality scoring, we first train a character-based xLSTM model on the DTA documents.
+
+## Tokenizer
+
+The first step is to build a character tokenizer on the DTA documents. The `build_tokenizer.py` script uses the `text` column, normalizes it with the rules defined in `text_normalization.py` (such as de-hyphenation, NFC, lowercasing, `ſ` -> `s`, `uͤ` -> `ü`, quote/dash unification, digits -> `0`, whitespace collapsing), counts characters and keeps the most frequent ones up to `--vocab-size` (256 by default, so data shards fit in `uint8`), plus `<eos>` (id 0) and `<unk>` (id 1).
+
+The following command can be used for that:
+
+```bash
+python build_tokenizer.py \
+  --dataset "histde/dta-documents" \
+  --split train \
+  --output-dir dta_xlstm/tokenizer \
+  --vocab-size 256 \
+  --num-workers 8
+```
+
+This outputs:
+
+```bash
+Counting characters in histde/dta-documents (split train) ...
+  500 rows streamed, 47,712,027 characters
+  1000 rows streamed, 270,289,702 characters
+  1500 rows streamed, 480,631,065 characters
+  2000 rows streamed, 565,806,549 characters
+  2500 rows streamed, 779,292,258 characters
+  3000 rows streamed, 819,022,815 characters
+  3500 rows streamed, 859,108,062 characters
+  4000 rows streamed, 887,371,455 characters
+  4500 rows streamed, 920,697,707 characters
+  5000 rows streamed, 1,090,396,475 characters
+5480 usable documents, 1,366,003,516 characters, 1276 distinct
+Vocabulary: 256 entries, <unk> rate 0.00398%
+Done -> dta_xlstm/tokenizer/ (tokenizer.json, tokenizer_config.json, vocab.json, tokenizer_stats.json)
+```
+
+The result is a Hugging Face Fast Tokenizer (`tokenizer.json` + `tokenizer_config.json`). Another written files are the `vocab.json`, which is a human-readable vocab and `tokenizer_stats.json`, that includes some tokenizer stats.
+
+The HF-compatible tokenizer can be loaded and tested with:
+
+```python
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("dta_xlstm/tokenizer")
+tokenizer.tokenize("Wie die jetzige boͤſe Zeit/ 1642")
+# ['w', 'i', 'e', ' ', 'd', 'i', 'e', ' ', 'j', 'e', 't', 'z', 'i', 'g', 'e', ' ', 'b', 'ö', 's', 'e', ' ', 'z', 'e', 'i', 't', '/', ' ', '0', '0', '0', '0']
+```
+
+## Data Preprocessing
+
+The second step encodes the DTA documents with that tokenizer into Numpy-compatible shards that the pretraining script is later reading-in. Documents are streamed, encoded and written as they arrive:
+
+```bash
+python prepare_xlstm_data.py \
+  --tokenizer dta_xlstm/tokenizer \
+  --dataset "histde/dta-documents" \
+  --split train \
+  --output-dir dta_xlstm/data \
+  --save-every-n-chars 100000000 \
+  --num-workers 8
+```
+
+This outputs:
+
+```bash
+Tokenizer: dta_xlstm/tokenizer (256 tokens, uint8 shards)
+Encoding histde/dta-documents (split train) ...
+  500 rows streamed, 500 usable, 47,712,027 characters
+Writing numpy shard: dta_xlstm/data/dta_000000.npy (103,041,651 characters)
+Writing numpy shard: dta_xlstm/data/dta_000001.npy (100,520,151 characters)
+  1000 rows streamed, 1000 usable, 270,289,702 characters
+Writing numpy shard: dta_xlstm/data/dta_000002.npy (100,100,389 characters)
+Writing numpy shard: dta_xlstm/data/dta_000003.npy (100,068,658 characters)
+  1500 rows streamed, 1500 usable, 480,631,065 characters
+Writing numpy shard: dta_xlstm/data/dta_000004.npy (100,142,372 characters)
+  2000 rows streamed, 2000 usable, 565,806,549 characters
+Writing numpy shard: dta_xlstm/data/dta_000005.npy (100,196,485 characters)
+Writing numpy shard: dta_xlstm/data/dta_000006.npy (100,055,973 characters)
+  2500 rows streamed, 2500 usable, 779,292,258 characters
+Writing numpy shard: dta_xlstm/data/dta_000007.npy (100,147,565 characters)
+  3000 rows streamed, 3000 usable, 819,022,815 characters
+  3500 rows streamed, 3500 usable, 859,108,062 characters
+  4000 rows streamed, 4000 usable, 887,371,455 characters
+Writing numpy shard: dta_xlstm/data/dta_000008.npy (100,031,857 characters)
+  4500 rows streamed, 4500 usable, 920,697,707 characters
+Writing numpy shard: dta_xlstm/data/dta_000009.npy (101,487,908 characters)
+  5000 rows streamed, 5000 usable, 1,090,396,475 characters
+Writing numpy shard: dta_xlstm/data/dta_000010.npy (100,227,277 characters)
+Writing numpy shard: dta_xlstm/data/dta_000011.npy (100,305,673 characters)
+Writing numpy shard: dta_xlstm/data/dta_000012.npy (101,998,777 characters)
+Writing numpy shard: dta_xlstm/data/dta_000013.npy (57,684,260 characters)
+5480 usable documents, 1,366,003,516 characters, <unk> rate 0.00398%
+Done -> dta_xlstm/data/ (14 shards, tokenizer, metadata.json)
+```
+
+## Training
+
+The character-based xLSTM model can be trained with:
+
+```bash
+python train_xlstm.py \
+  --data-dir dta_xlstm/data \
+  --output_dir dta_xlstm/model \
+  --run_name dta-xlstm-20m \
+  --hidden_size 384 \
+  --num_blocks 11 \
+  --num_heads 3 \
+  --block_size 2048 \
+  --per_device_train_batch_size 32 \
+  --gradient_accumulation_steps 2 \
+  --token_budget 2500000000 \
+  --learning_rate 3e-3 \
+  --min_lr_rate 0.1 \
+  --adam_beta1 0.99 \
+  --adam_beta2 0.95 \
+  --weight_decay 0.1 \
+  --max_grad_norm 0.5 \
+  --bf16 \
+  --chunkwise_kernel chunkwise--triton_xl_chunk \
+  --dataloader_num_workers 2 \
+  --logging_steps 100 \
+  --save_steps 2500 \
+  --save_total_limit 3 \
+  --seed 42
+```
+
 # 📝 Changelog
 
 * 21.08.2026: Initial release of this repo.
